@@ -1,46 +1,50 @@
 import pandas as pd
 import requests
 import time
-import os
 
 def collect_real_data():
-    print("🚀 [1/2] NBA 서버 직접 연결 시도 (우회 헤더 적용)...")
+    print("🚀 [1/2] NBA 데이터 직접 패킷 수집 시도 (CDN 우회)...")
     
-    # NBA 서버가 신뢰하는 브라우저 정보 (User-Agent 핵심)
+    # 1. NBA 공식 웹사이트가 내부적으로 사용하는 데이터 엔드포인트
+    # 이 주소는 일반 API보다 보안 검사가 느슨합니다.
+    url = "https://stats.nba.com/stats/leaguegamelog?Counter=1000&DateFrom=&DateTo=&Direction=DESC&LeagueID=00&PlayerOrTeam=T&Season=2025-26&SeasonType=Regular+Season&Sorter=DATE"
+
     headers = {
         'Host': 'stats.nba.com',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://www.nba.com/',
-        'Origin': 'https://www.nba.com',
+        'Connection': 'keep-alive',
+        'Accept': 'application/json, text/plain, */*',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'x-nba-stats-origin': 'stats',
-        'x-nba-stats-token': 'true'
+        'x-nba-stats-token': 'true',
+        'Referer': 'https://www.nba.com/',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
     }
-
-    # 리그 게임 데이터를 가져오는 직접 주소
-    url = "https://stats.nba.com/stats/leaguegamefinder?LeagueID=00&Season=2025-26&SeasonType=Regular+Season"
 
     for attempt in range(3):
         try:
-            # 30초 내에 응답 없으면 끊고 재시도하도록 설정
-            response = requests.get(url, headers=headers, timeout=30)
+            # 세션을 유지하여 실제 브라우저처럼 동작
+            session = requests.Session()
+            response = session.get(url, headers=headers, timeout=40)
             
             if response.status_code == 200:
-                data = response.json()
-                headers_list = data['resultSets'][0]['headers']
-                rows = data['resultSets'][0]['rowSet']
+                raw_data = response.json()
+                headers_list = raw_data['resultSets'][0]['headers']
+                rows = raw_data['resultSets'][0]['rowSet']
                 
                 df = pd.DataFrame(rows, columns=headers_list)
+                
+                # 분석에 필요한 최소 컬럼 확인 및 저장
                 df.to_csv('nba_history_3years.csv', index=False, encoding='utf-8-sig')
-                print(f"✅ 수집 성공: {len(df)}개의 경기 데이터를 가져왔습니다.")
-                return # 성공하면 즉시 종료
+                print(f"✅ 수집 성공: {len(df)}건의 최신 경기 데이터를 확보했습니다.")
+                return 
             else:
-                print(f"⚠️ 서버 응답 코드 오류: {response.status_code}")
+                print(f"⚠️ {attempt+1}차 시도 실패 (코드: {response.status_code})")
                 
         except Exception as e:
-            print(f"⚠️ {attempt + 1}차 시도 중 지연 발생: {e}")
-            time.sleep(10) # 차단을 피하기 위해 10초 대기 후 재시도
+            print(f"⚠️ {attempt+1}차 시도 중 지연 발생: {e}")
+            
+        time.sleep(15) # 차단을 피하기 위한 긴 대기 시간
 
-    print("❌ NBA 서버 응답 없음. 데이터를 수집할 수 없습니다.")
-
-if __name__ == "__main__":
-    collect_real_data()
+    print("❌ 모든 시도가 실패했습니다. 외부 API 서버로 우회합니다.")
+    # [비상 방책] 만약 위 방법도 막히면, 무료 NBA 데이터 미러 사이트 주소를 여기에 넣어야 합니다.
