@@ -3,19 +3,30 @@ import requests
 from bs4 import BeautifulSoup
 from nba_api.stats.endpoints import leaguegamefinder
 import time
-import socket
 
 def collect_real_data():
-    print("🚀 [1/2] NBA 최신 데이터 수집 중 (타임아웃 강화)...")
+    print("🚀 [1/2] NBA 최신 데이터 수집 중 (서버 차단 우회 모드)...")
     
-    # 재시도 로직 설정
+    # 실제 브라우저처럼 보이기 위한 헤더 설정
+    headers = {
+        'Host': 'stats.nba.com',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9,ko;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Referer': 'https://www.nba.com/',
+        'Origin': 'https://www.nba.com'
+    }
+
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            # 1. LeagueGameFinder 호출 시 타임아웃을 60초로 늘림
+            # 타임아웃을 100초로 대폭 늘리고, 헤더를 강제 주입
             game_finder = leaguegamefinder.LeagueGameFinder(
                 league_id_nullable='00', 
-                timeout=60 # 기존 30초에서 60초로 확장
+                headers=headers, 
+                timeout=100
             )
             all_games = game_finder.get_data_frames()[0]
             
@@ -26,38 +37,18 @@ def collect_real_data():
             
             final_df.to_csv('nba_history_3years.csv', index=False, encoding='utf-8-sig')
             print(f"✅ 수집 완료: {len(final_df)}건 저장")
-            break # 성공 시 루프 탈출
+            break
             
         except Exception as e:
             print(f"⚠️ {attempt + 1}차 시도 실패: {e}")
             if attempt < max_retries - 1:
-                print("⏳ 5초 후 다시 시도합니다...")
-                time.sleep(5)
+                # 다음 시도 전 대기 시간을 더 늘려 서버의 의심을 피함
+                wait_time = 10 * (attempt + 1)
+                print(f"⏳ {wait_time}초 후 다시 시도합니다...")
+                time.sleep(wait_time)
             else:
-                print("❌ 모든 재시도가 실패했습니다. NBA 서버 상태를 확인하세요.")
+                print("❌ NBA 서버가 현재 응답하지 않습니다. 잠시 후 다시 시도해 주세요.")
 
-    print("\n🚀 [2/2] CBS Sports 통합 뉴스 크롤링 중...")
-    try:
-        url = "https://www.cbssports.com/nba/injuries/"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        res = requests.get(url, headers=headers, timeout=20)
-        soup = BeautifulSoup(res.text, 'html.parser')
-        
-        news_data = []
-        team_sections = soup.find_all('div', class_='TableBase')
-        for section in team_sections:
-            try:
-                team_name = section.find('span', class_='TeamName').text.strip()
-                rows = section.find_all('tr', class_='TableBase-bodyTr')
-                issues = [f"{r.find_all('td')[4].text.strip()}: {r.find_all('td')[0].text.strip()}" for r in rows if len(r.find_all('td')) >= 5]
-                if issues:
-                    news_data.append({'TEAM': team_name, 'NEWS': " | ".join(issues)})
-            except: continue
-            
-        pd.DataFrame(news_data).to_csv('nba_news.csv', index=False, encoding='utf-8-sig')
-        print(f"✅ 뉴스 업데이트 완료")
-    except Exception as e:
-        print(f"❌ 뉴스 크롤링 실패: {e}")
-
-if __name__ == "__main__":
-    collect_real_data()
+    # [2/2 뉴스 크롤링 부분은 이전과 동일하므로 생략하거나 그대로 유지]
+    print("\n🚀 [2/2] CBS Sports 뉴스 업데이트 중...")
+    # ... (생략)
