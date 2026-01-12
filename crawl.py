@@ -3,46 +3,13 @@ import requests
 import time
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
-from nba_api.stats.endpoints import leaguegamefinder
 
 
 # =========================
-# 1️⃣ PRIMARY: nba_api (실패 허용)
+# 1️⃣ NBA 공식 CDN에서 경기 데이터 수집 (유일한 실사용 루트)
 # =========================
-def fetch_with_nba_api():
-    print("📡 [PRIMARY] stats.nba.com (nba_api) 시도 중...")
-    seasons = ["2025-26", "2024-25", "2023-24"]
-    dfs = []
-
-    for season in seasons:
-        for attempt in range(3):
-            try:
-                print(f"  └ 시즌 {season} 시도 {attempt+1}/3")
-                gf = leaguegamefinder.LeagueGameFinder(
-                    league_id_nullable="00",
-                    season_nullable=season
-                )
-                df = gf.get_data_frames()[0]
-                if not df.empty:
-                    dfs.append(df)
-                break
-            except Exception as e:
-                print(f"    ⚠️ 실패: {e}")
-                time.sleep(5)
-
-    if not dfs:
-        raise Exception("nba_api 전체 실패")
-
-    final_df = pd.concat(dfs, ignore_index=True)
-    final_df["GAME_DATE"] = pd.to_datetime(final_df["GAME_DATE"])
-    return final_df
-
-
-# =========================
-# 2️⃣ FALLBACK: NBA 공식 CDN (GitHub Actions 대응)
-# =========================
-def fetch_with_nba_cdn(days=450):
-    print("🌐 [FALLBACK] NBA 공식 CDN(JSON) 사용")
+def fetch_with_nba_cdn(days=180):
+    print("🌐 [CDN] NBA 공식 scoreboard JSON 수집 시작")
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -51,7 +18,8 @@ def fetch_with_nba_cdn(days=450):
         "Origin": "https://www.nba.com"
     }
 
-    end_date = datetime.utcnow().date()
+    # 🔥 핵심: 어제까지만 수집 (UTC 기준)
+    end_date = datetime.utcnow().date() - timedelta(days=1)
     start_date = end_date - timedelta(days=days)
 
     games = []
@@ -77,6 +45,7 @@ def fetch_with_nba_cdn(days=450):
             for g in game_list:
                 matchup = f"{g['awayTeam']['teamTricode']} @ {g['homeTeam']['teamTricode']}"
 
+                # 홈팀
                 games.append({
                     "GAME_ID": g["gameId"],
                     "GAME_DATE": date,
@@ -87,6 +56,7 @@ def fetch_with_nba_cdn(days=450):
                     "WL": None
                 })
 
+                # 원정팀
                 games.append({
                     "GAME_ID": g["gameId"],
                     "GAME_DATE": date,
@@ -97,62 +67,65 @@ def fetch_with_nba_cdn(days=450):
                     "WL": None
                 })
 
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ CDN 요청 오류 ({date}): {e}")
 
         date += timedelta(days=1)
         time.sleep(0.2)
 
     if not games:
-        raise Exception("CDN 데이터 수집 실패")
+        print("❌ CDN에서 경기 데이터 없음 (정상 종료)")
+        return pd.DataFrame()
 
     df = pd.DataFrame(games)
     df["GAME_DATE"] = pd.to_datetime(df["GAME_DATE"])
     df = df.sort_values("GAME_DATE", ascending=False)
 
-    print(f"✅ CDN 기반 경기 {len(df)}건 수집 성공")
+    print(f"✅ CDN 경기 데이터 {len(df)}건 수집 완료")
     return df
 
 
 # =========================
-# 3️⃣ CBS Sports 부상자 뉴스
+# 2️⃣ CBS Sports 부상자 뉴스
 # =========================
 def fetch_injury_news():
-    print("🚑 [NEWS] CBS Sports 부상자 뉴스 수집 중...")
+    print("🚑 [NEWS] CBS Sports 부상자 뉴스 수집")
+
     url = "https://www.cbssports.com/nba/injuries/"
     headers = {"User-Agent": "Mozilla/5.0"}
 
-    res = requests.get(url, headers=headers)
+    res = requests.get(url, headers=headers, timeout=15)
     soup = BeautifulSoup(res.text, "html.parser")
 
-    news_data = []
+    news = []
 
     rows = soup.select("table tr")[1:]
     for row in rows:
         cols = row.find_all("td")
         if len(cols) >= 5:
-            news_data.append({
+            news.append({
                 "TEAM": cols[1].text.strip(),
                 "NEWS": f"{cols[4].text.strip()}: {cols[0].text.strip()} ({cols[3].text.strip()})"
             })
 
-    if news_data:
-        pd.DataFrame(news_data).to_csv("nba_news.csv", index=False, encoding="utf-8-sig")
-        print(f"✅ 부상자 뉴스 {len(news_data)}건 저장")
+    if news:
+        pd.DataFrame(news).to_csv("nba_news.csv", index=False, encoding="utf-8-sig")
+        print(f"✅ 부상자 뉴스 {len(news)}건 저장")
+    else:
+        print("⚠️ 부상자 뉴스 없음")
 
 
 # =========================
-# 4️⃣ MAIN
+# 3️⃣ MAIN PIPELINE
 # =========================
 def collect_real_data():
     print("🚀 NBA 데이터 수집 파이프라인 시작")
 
-    try:
-        df = fetch_with_nba_api()
-        print("✅ nba_api 성공")
-    except Exception as e:
-        print(f"❌ nba_api 실패 → CDN fallback 전환 ({e})")
-        df = fetch_with_nba_cdn()
+    df = fetch_with_nba_cdn(days=180)
+
+    if df.empty:
+        print("❌ 경기 데이터 없음 → 이전 데이터 유지")
+        return
 
     df.to_csv("nba_history_3years.csv", index=False, encoding="utf-8-sig")
     print(f"📁 nba_history_3years.csv 저장 완료 ({len(df)}건)")
@@ -162,5 +135,4 @@ def collect_real_data():
 
 if __name__ == "__main__":
     collect_real_data()
-
 
