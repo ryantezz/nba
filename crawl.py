@@ -7,11 +7,10 @@ from nba_api.stats.endpoints import leaguegamefinder
 
 
 # =========================
-# 1️⃣ PRIMARY: nba_api (시도만 하고 실패해도 OK)
+# 1️⃣ PRIMARY: nba_api (실패 허용)
 # =========================
 def fetch_with_nba_api():
     print("📡 [PRIMARY] stats.nba.com (nba_api) 시도 중...")
-
     seasons = ["2025-26", "2024-25", "2023-24"]
     dfs = []
 
@@ -40,10 +39,17 @@ def fetch_with_nba_api():
 
 
 # =========================
-# 2️⃣ FALLBACK: NBA 공식 CDN (핵심 해결책)
+# 2️⃣ FALLBACK: NBA 공식 CDN (GitHub Actions 대응)
 # =========================
 def fetch_with_nba_cdn(days=450):
     print("🌐 [FALLBACK] NBA 공식 CDN(JSON) 사용")
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "application/json",
+        "Referer": "https://www.nba.com/",
+        "Origin": "https://www.nba.com"
+    }
 
     end_date = datetime.utcnow().date()
     start_date = end_date - timedelta(days=days)
@@ -52,17 +58,21 @@ def fetch_with_nba_cdn(days=450):
 
     date = start_date
     while date <= end_date:
-        date_str = date.strftime("%Y%m%d")  # 🔥 중요
+        date_str = date.strftime("%Y%m%d")
         url = f"https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_{date_str}.json"
 
         try:
-            res = requests.get(url, timeout=10)
+            res = requests.get(url, headers=headers, timeout=10)
             if res.status_code != 200:
                 date += timedelta(days=1)
                 continue
 
             data = res.json()
             game_list = data.get("scoreboard", {}).get("games", [])
+
+            if not game_list:
+                date += timedelta(days=1)
+                continue
 
             for g in game_list:
                 matchup = f"{g['awayTeam']['teamTricode']} @ {g['homeTeam']['teamTricode']}"
@@ -91,7 +101,7 @@ def fetch_with_nba_cdn(days=450):
             pass
 
         date += timedelta(days=1)
-        time.sleep(0.25)
+        time.sleep(0.2)
 
     if not games:
         raise Exception("CDN 데이터 수집 실패")
@@ -109,43 +119,30 @@ def fetch_with_nba_cdn(days=450):
 # =========================
 def fetch_injury_news():
     print("🚑 [NEWS] CBS Sports 부상자 뉴스 수집 중...")
-
     url = "https://www.cbssports.com/nba/injuries/"
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    headers = {"User-Agent": "Mozilla/5.0"}
 
     res = requests.get(url, headers=headers)
     soup = BeautifulSoup(res.text, "html.parser")
 
     news_data = []
 
-    tables = soup.find_all("table")
-    for table in tables:
-        rows = table.find_all("tr")
-        for row in rows[1:]:
-            cols = row.find_all("td")
-            if len(cols) >= 5:
-                player = cols[0].text.strip()
-                team = cols[1].text.strip()
-                injury = cols[3].text.strip()
-                status = cols[4].text.strip()
-
-                news_data.append({
-                    "TEAM": team,
-                    "NEWS": f"{status}: {player} ({injury})"
-                })
+    rows = soup.select("table tr")[1:]
+    for row in rows:
+        cols = row.find_all("td")
+        if len(cols) >= 5:
+            news_data.append({
+                "TEAM": cols[1].text.strip(),
+                "NEWS": f"{cols[4].text.strip()}: {cols[0].text.strip()} ({cols[3].text.strip()})"
+            })
 
     if news_data:
-        df = pd.DataFrame(news_data)
-        df.to_csv("nba_news.csv", index=False, encoding="utf-8-sig")
-        print(f"✅ 부상자 뉴스 {len(df)}건 저장")
-    else:
-        print("⚠️ 부상자 뉴스 없음")
+        pd.DataFrame(news_data).to_csv("nba_news.csv", index=False, encoding="utf-8-sig")
+        print(f"✅ 부상자 뉴스 {len(news_data)}건 저장")
 
 
 # =========================
-# 4️⃣ 메인 파이프라인
+# 4️⃣ MAIN
 # =========================
 def collect_real_data():
     print("🚀 NBA 데이터 수집 파이프라인 시작")
@@ -165,4 +162,5 @@ def collect_real_data():
 
 if __name__ == "__main__":
     collect_real_data()
+
 
