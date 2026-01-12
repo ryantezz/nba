@@ -1,0 +1,24 @@
+name: NBA_Daily_Automation
+on:
+  schedule:
+    - cron: '30 22 * * *' # 한국 시간 기준 오전 7:30분 실행
+  workflow_dispatch:      # 수동 실행 버튼을 만듭니다
+
+jobs:
+  run_analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          pip install pandas xgboost nba_api requests beautifulsoup4 python-dateutil
+      - name: Run NBA AI
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          python crawl.py
+          python predict.py
