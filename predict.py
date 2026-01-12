@@ -10,14 +10,28 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-# os.getenv 안의 이름이 GitHub Secrets에 등록한 이름과 토씨 하나 안 틀리고 똑같아야 합니다.
-DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
+# GitHub Secrets에서 가져온 URL 앞뒤의 공백이나 따옴표를 제거하도록 설정
+DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL', '').strip().replace('"', '').replace("'", "")
 
 def send_discord(message):
-    # 만약 URL이 비어있으면 아무 일도 일어나지 않고 종료됩니다. (오류 안 남)
-    if not DISCORD_WEBHOOK_URL: 
-        print("⚠️ 웹훅 URL이 설정되지 않았습니다.")
+    # 로그 확인용 (주소의 앞 10자만 출력하여 보안 유지)
+    if not DISCORD_WEBHOOK_URL:
+        print("❌ [DEBUG] DISCORD_WEBHOOK_URL이 비어있습니다. GitHub Secrets 설정을 확인하세요.")
         return
+    else:
+        print(f"✅ [DEBUG] 웹훅 주소 감지됨 (앞부분): {DISCORD_WEBHOOK_URL[:10]}...")
+
+    payload = {"content": f"### 🏀 NBA AI 분석 리포트\n{message}"}
+    
+    try:
+        response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
+        if response.status_code == 204:
+            print("🚀 [SUCCESS] 디스코드로 메시지를 성공적으로 보냈습니다!")
+        else:
+            print(f"❌ [ERROR] 전송 실패 (상태 코드: {response.status_code})")
+            print(f"응답 내용: {response.text}")
+    except Exception as e:
+        print(f"❌ [EXCEPTION] 전송 중 오류 발생: {e}")
 
 TEAM_MAP = {'골든워리':'GSW', '덴버너게':'DEN', '댈러스매':'DAL', '레이커스':'LAL', '밀워키벅스':'MIL', '보스턴셀':'BOS', '브루네츠':'BKN', '새크킹스':'SAC', '애틀호크':'ATL', '오클썬더':'OKC', '워싱워저':'WAS', '유타재즈':'UTA', '인디페이':'IND', '클리퍼스':'LAC', '클리블랜':'CLE', '토론토랩':'TOR', '피닉선즈':'PHX', '필라76':'PHI', '휴스로케':'HOU', '미네팀버':'MIN', '뉴올펠리':'NOP', '뉴욕닉스':'NYK', '시카불스':'CHI', '멤피그리':'MEM', '마이히트':'MIA', '올랜매직':'ORL', '샌안스퍼':'SAS', '포틀트레':'POR', '디트피스':'DET', '샬럿호네':'CHA'}
 INV_TEAM_MAP = {v: k for k, v in TEAM_MAP.items()}
@@ -106,4 +120,5 @@ def run_ultimate_system():
 if __name__ == "__main__":
 
     run_ultimate_system()
+
 
