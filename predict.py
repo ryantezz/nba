@@ -10,8 +10,14 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-# 설정 (GitHub Secrets 연동)
+# os.getenv 안의 이름이 GitHub Secrets에 등록한 이름과 토씨 하나 안 틀리고 똑같아야 합니다.
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
+
+def send_discord(message):
+    # 만약 URL이 비어있으면 아무 일도 일어나지 않고 종료됩니다. (오류 안 남)
+    if not DISCORD_WEBHOOK_URL: 
+        print("⚠️ 웹훅 URL이 설정되지 않았습니다.")
+        return
 
 TEAM_MAP = {'골든워리':'GSW', '덴버너게':'DEN', '댈러스매':'DAL', '레이커스':'LAL', '밀워키벅스':'MIL', '보스턴셀':'BOS', '브루네츠':'BKN', '새크킹스':'SAC', '애틀호크':'ATL', '오클썬더':'OKC', '워싱워저':'WAS', '유타재즈':'UTA', '인디페이':'IND', '클리퍼스':'LAC', '클리블랜':'CLE', '토론토랩':'TOR', '피닉선즈':'PHX', '필라76':'PHI', '휴스로케':'HOU', '미네팀버':'MIN', '뉴올펠리':'NOP', '뉴욕닉스':'NYK', '시카불스':'CHI', '멤피그리':'MEM', '마이히트':'MIA', '올랜매직':'ORL', '샌안스퍼':'SAS', '포틀트레':'POR', '디트피스':'DET', '샬럿호네':'CHA'}
 INV_TEAM_MAP = {v: k for k, v in TEAM_MAP.items()}
@@ -100,3 +106,4 @@ def run_ultimate_system():
 if __name__ == "__main__":
 
     run_ultimate_system()
+
