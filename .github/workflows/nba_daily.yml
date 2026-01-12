@@ -1,24 +1,49 @@
-name: NBA_Daily_Automation
+name: NBA_Daily_AI_Automation
+
 on:
   schedule:
-    - cron: '30 22 * * *' # 한국 시간 기준 오전 7:30분 실행
-  workflow_dispatch:      # 수동 실행 버튼을 만듭니다
+    # 매일 아침 한국 시간(KST) 기준 약 7시~8시 사이에 실행 (UTC 22:00)
+    - cron: '0 22 * * *'
+  workflow_dispatch: # 수동으로 즉시 실행 버튼 활성화
 
 jobs:
-  run_analysis:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
+      # 1. 저장소의 코드를 서버로 가져옴
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. 파이썬 환경 설정 (3.10 버전 권장)
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
+
+      # 3. 필수 라이브러리 설치 (scikit-learn 누락 해결)
       - name: Install dependencies
         run: |
-          pip install pandas xgboost nba_api requests beautifulsoup4 python-dateutil
-      - name: Run NBA AI
+          python -m pip install --upgrade pip
+          pip install pandas numpy xgboost scikit-learn requests nba_api python-dateutil
+
+      # 4. 데이터 수집 및 분석 시스템 실행
+      - name: Run NBA AI System
         env:
+          # GitHub Secrets에 등록한 웹훅 주소를 파이썬 환경변수로 연결
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
+          echo "🚀 Starting Data Collection..."
           python crawl.py
+          
+          echo "🧠 Starting AI Prediction..."
           python predict.py
+
+      # 5. (선택사항) 생성된 데이터 파일을 저장소에 백업 (필요한 경우만)
+      # - name: Commit and push changes
+      #   run: |
+          # git config --global user.name 'github-actions'
+          # git config --global user.email 'github-actions@github.com'
+          # git add nba_history_3years.csv
+          # git commit -m "Update NBA Data" || echo "No changes to commit"
+          # git push
